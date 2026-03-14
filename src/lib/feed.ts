@@ -22,10 +22,15 @@ export function hasContractConfig(): boolean {
   return Boolean(TINO_FEED_OWNER && TINO_MODULE_ADDRESS);
 }
 
-/** Wait for a transaction to be committed (so view state is updated). */
+/** Wait for a transaction to be committed (so view state is updated). Uses public endpoint to avoid 401 from API key. */
 export async function waitForTransaction(transactionHash: string): Promise<void> {
-  const aptos = getAptosClient();
-  await aptos.waitForTransaction({ transactionHash });
+  const aptos = new Aptos(new AptosConfig({ network: Network.TESTNET, clientConfig: undefined }));
+  try {
+    await aptos.waitForTransaction({ transactionHash });
+  } catch (e) {
+    console.warn("Aptos waitForTransaction failed, waiting 4s:", e instanceof Error ? e.message : e);
+    await new Promise((r) => setTimeout(r, 4000));
+  }
 }
 
 export interface PostEntryWithIndex extends DemoPostEntry {

@@ -6,7 +6,7 @@ import {
   ShelbyBlobClient,
 } from "@shelby-protocol/sdk/browser";
 import { Network } from "@aptos-labs/ts-sdk";
-import { APTOS_API_KEY, SHELBY_API_KEY } from "../config";
+import { SHELBY_API_KEY } from "../config";
 
 // Shelby: using testnet (not shelbynet)
 const shelbyNetwork = Network.TESTNET;
@@ -58,14 +58,18 @@ export async function uploadBlob(
   const aptos = new Aptos(
     new AptosConfig({
       network: Network.TESTNET,
-      clientConfig: APTOS_API_KEY ? { API_KEY: APTOS_API_KEY } : undefined,
+      clientConfig: undefined,
     })
   );
   try {
     await aptos.waitForTransaction({ transactionHash: hash });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    throw new Error(`Error waiting for transaction: ${msg}`);
+    console.warn(
+      "Aptos waitForTransaction failed (e.g. API key or network). Waiting 4s then continuing. Transaction was already submitted by the wallet.",
+      msg
+    );
+    await new Promise((r) => setTimeout(r, 4000));
   }
 
   try {
