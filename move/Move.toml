@@ -1,0 +1,14 @@
+[package]
+name = "tino_feed"
+version = "1.0.0"
+authors = ["Tino"]
+
+[addresses]
+tino_feed = "_"
+
+[dev-addresses]
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-framework.git"
+rev = "21a84b0c6272d8df2186861341da4ac6abdd4193"
+subdir = "aptos-framework"
