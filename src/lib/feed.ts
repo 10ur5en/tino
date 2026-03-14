@@ -1,5 +1,5 @@
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { APTOS_API_KEY, TINO_FEED_OWNER, TINO_MODULE_ADDRESS } from "../config";
+import { TINO_FEED_OWNER, TINO_MODULE_ADDRESS } from "../config";
 
 const DEMO_FEED_KEY = "tino_demo_feed";
 
@@ -13,7 +13,7 @@ function getAptosClient(): Aptos {
   return new Aptos(
     new AptosConfig({
       network: Network.TESTNET,
-      clientConfig: APTOS_API_KEY ? { API_KEY: APTOS_API_KEY } : undefined,
+      clientConfig: undefined,
     })
   );
 }

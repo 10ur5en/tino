@@ -19,7 +19,7 @@ function App() {
   const { posts, loading, error, refresh, hasContract } = useFeed(
     account?.address != null ? String(account.address) : null
   );
-  const { createPost, likePost, addComment, deletePost, submitting, error: actionError } = usePostActions();
+  const { createPost, likePost, addComment, deletePost, submitting, error: actionError } = usePostActions(refresh);
   const [selectedPost, setSelectedPost] = useState<PostRecord | null>(null);
 
   useEffect(() => {

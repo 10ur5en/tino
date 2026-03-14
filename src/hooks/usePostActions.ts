@@ -12,7 +12,7 @@ import {
   buildDeletePostPayload,
   waitForTransaction,
 } from "../lib/feed";
-export function usePostActions() {
+export function usePostActions(onSuccess?: () => void) {
   const { account, signAndSubmitTransaction } = useWallet();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,8 +54,10 @@ export function usePostActions() {
           if (hash) {
             await waitForTransaction(hash);
           }
+          setTimeout(() => onSuccess?.(), 1500);
         } else {
           appendDemoPost({ author: String(account.address), blobName, timestamp });
+          setTimeout(() => onSuccess?.(), 1500);
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -65,7 +67,7 @@ export function usePostActions() {
         setSubmitting(false);
       }
     },
-    [account?.address, hasContract, signAndSubmitTransaction]
+    [account?.address, hasContract, signAndSubmitTransaction, onSuccess]
   );
 
   const likePost = useCallback(
