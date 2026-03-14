@@ -5,6 +5,8 @@ import { usePostComments } from "../hooks/usePostComments";
 import { shelbyBlobUrl } from "../config";
 import { addCommentedPostKey, postKeyFromPost } from "../lib/commentedPosts";
 
+const CONTENT_PREVIEW_LENGTH = 200;
+
 type Props = {
   post: PostRecord;
   likePost: ReturnType<typeof usePostActions>["likePost"];
@@ -18,6 +20,10 @@ type Props = {
   defaultExpandComments?: boolean;
   /** Called after topic is deleted (e.g. clear selection) */
   onDeleted?: () => void;
+  /** Feed mode: compact card, truncated content, click to open discussion */
+  compact?: boolean;
+  /** When compact, called when card is clicked to open full view */
+  onSelect?: () => void;
 };
 
 function shortAddress(addr: string) {
@@ -35,6 +41,12 @@ function formatTime(ts: number) {
   return d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
 }
 
+function truncateContent(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  return t.slice(0, max).trim() + "…";
+}
+
 export function PostCard({
   post,
   likePost,
@@ -45,6 +57,8 @@ export function PostCard({
   currentAddress = null,
   defaultExpandComments = false,
   onDeleted,
+  compact = false,
+  onSelect,
 }: Props) {
   const [showComments, setShowComments] = useState(defaultExpandComments);
   const [commentText, setCommentText] = useState("");
@@ -79,8 +93,16 @@ export function PostCard({
     if (showComments) loadComments();
   };
 
+  const contentDisplay = compact ? truncateContent(post.content ?? "", CONTENT_PREVIEW_LENGTH) : (post.content ?? "");
+
   return (
-    <article className="post-card post-card--topic">
+    <article
+      className={`post-card post-card--topic ${compact ? "post-card--compact" : ""}`}
+      role={compact && onSelect ? "button" : undefined}
+      tabIndex={compact && onSelect ? 0 : undefined}
+      onClick={compact && onSelect ? (e) => { if (!(e.target as HTMLElement).closest(".post-card__actions")) onSelect(); } : undefined}
+      onKeyDown={compact && onSelect ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } } : undefined}
+    >
       <header className="post-card__header">
         <div className="post-card__avatar" aria-hidden>
           {shortAddress(post.author).slice(0, 2).toUpperCase()}
@@ -96,9 +118,9 @@ export function PostCard({
         {post.title ? (
           <h2 className="post-card__title">{post.title}</h2>
         ) : null}
-        <p className="post-card__content">{post.content}</p>
+        <p className="post-card__content">{contentDisplay}</p>
       </div>
-      <div className="post-card__actions">
+      <div className="post-card__actions" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           className={`post-card__action ${post.hasLiked ? "is-liked" : ""}`}
@@ -112,13 +134,13 @@ export function PostCard({
         <button
           type="button"
           className="post-card__action"
-          onClick={onToggleComments}
-          title="Show replies"
+          onClick={compact && onSelect ? () => onSelect() : onToggleComments}
+          title={compact && onSelect ? "View discussion" : "Show replies"}
         >
           <span className="post-card__action-icon">💬</span>
           <span>{post.commentCount ?? 0} replies</span>
         </button>
-        {isAuthor && (
+        {isAuthor && !compact && (
           <button
             type="button"
             className="post-card__action post-card__action--delete"
@@ -131,7 +153,10 @@ export function PostCard({
           </button>
         )}
       </div>
-      {showComments && (
+      {compact && onSelect && (
+        <p className="post-card__view-hint">View discussion →</p>
+      )}
+      {showComments && !compact && (
         <div className="post-card__replies">
           {hasContract ? (
             <>

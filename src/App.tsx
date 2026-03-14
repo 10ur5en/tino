@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { useFeed } from "./hooks/useFeed";
 import { usePostActions } from "./hooks/usePostActions";
 import { CreatePost } from "./components/CreatePost";
 import { PostCard } from "./components/PostCard";
 import { Sidebar } from "./components/Sidebar";
+import { RightPanel } from "./components/RightPanel";
 import { WalletConnect } from "./components/WalletConnect";
+import { getCommentedPostKeys, postKeyFromPost } from "./lib/commentedPosts";
 import { shelbyBlobUrl } from "./config";
 import type { PostRecord } from "./types";
+import type { SidebarTab } from "./components/Sidebar";
 import "./App.css";
 
 function postKey(post: PostRecord) {
@@ -16,11 +19,35 @@ function postKey(post: PostRecord) {
 
 function App() {
   const { account, connected } = useWallet();
-  const { posts, loading, error, refresh, hasContract } = useFeed(
-    account?.address != null ? String(account.address) : null
-  );
+  const currentAddress = account?.address != null ? String(account.address) : null;
+  const { posts, loading, error, refresh, hasContract } = useFeed(currentAddress);
   const { createPost, likePost, addComment, deletePost, submitting, error: actionError } = usePostActions(refresh);
   const [selectedPost, setSelectedPost] = useState<PostRecord | null>(null);
+  const [feedFilter, setFeedFilter] = useState<SidebarTab>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const commentedKeys = useMemo(
+    () => (currentAddress ? getCommentedPostKeys(currentAddress) : []),
+    [currentAddress]
+  );
+
+  const tabFiltered = useMemo(() => {
+    if (feedFilter === "all") return posts;
+    if (feedFilter === "liked") return posts.filter((p) => p.hasLiked);
+    return posts.filter((p) => commentedKeys.includes(postKeyFromPost(p.author, p.blobName)));
+  }, [posts, feedFilter, commentedKeys]);
+
+  const filteredPosts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const list = !q
+      ? tabFiltered
+      : tabFiltered.filter((p) => {
+          const title = (p.title ?? "").toLowerCase();
+          const content = (p.content ?? "").toLowerCase();
+          return title.includes(q) || content.includes(q);
+        });
+    return [...list].sort((a, b) => b.timestamp - a.timestamp);
+  }, [tabFiltered, searchQuery]);
 
   useEffect(() => {
     if (selectedPost && !posts.some((p) => postKey(p) === postKey(selectedPost))) {
@@ -41,13 +68,13 @@ function App() {
       <div className="layout">
         {connected && (
           <Sidebar
-            posts={posts}
-            selectedPostKey={selectedPost ? postKey(selectedPost) : null}
-            onSelectPost={setSelectedPost}
+            activeTab={feedFilter}
+            onTabChange={setFeedFilter}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
             onNewTopic={() => setSelectedPost(null)}
             onRefresh={refresh}
             loading={loading}
-            currentAddress={account?.address != null ? String(account.address) : null}
           />
         )}
 
@@ -172,34 +199,58 @@ function App() {
                   </div>
                 </section>
               ) : (
-                <>
-                  <section className="create-section">
+                <section className="feed-flow">
+                  <div className="feed-compose">
                     <CreatePost
                       createPost={createPost}
                       submitting={submitting}
                       error={actionError}
                     />
-                  </section>
-                  <section className="feed-preview">
+                  </div>
+                  <div className="feed-timeline">
                     {loading && <p className="feed-loading">Loading…</p>}
                     {error && <p className="error">{error}</p>}
-                    {!loading && !error && posts.length === 0 && (
-                      <p className="empty-feed">No topics yet. Start the first one above.</p>
+                    {!loading && !error && filteredPosts.length === 0 && (
+                      <p className="empty-feed">
+                        {searchQuery.trim()
+                          ? "No topics match your search."
+                          : feedFilter === "liked"
+                            ? "No liked topics yet."
+                            : feedFilter === "commented"
+                              ? "No topics you commented on yet."
+                              : "No topics yet. Start the first one above."}
+                      </p>
                     )}
-                    {!loading && posts.length > 0 && (
-                      <p className="feed-hint">Select a topic from the sidebar or start a new one.</p>
+                    {!loading && filteredPosts.length > 0 && (
+                      <ul className="feed-list" aria-label="Feed">
+                        {filteredPosts.map((post) => (
+                          <li key={postKey(post)}>
+                            <PostCard
+                              post={post}
+                              likePost={likePost}
+                              addComment={addComment}
+                              deletePost={deletePost}
+                              submitting={submitting}
+                              hasContract={hasContract}
+                              currentAddress={account?.address != null ? String(account.address) : null}
+                              compact
+                              onSelect={() => setSelectedPost(post)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                  </section>
-                </>
+                  </div>
+                </section>
               )}
             </>
           )}
         </main>
-      </div>
 
-      <footer className="footer">
-        <span className="footer-text">Tino · Decentralized forum · Shelby & Aptos</span>
-      </footer>
+        {connected && (
+          <RightPanel posts={posts} onSelectPost={setSelectedPost} loading={loading} />
+        )}
+      </div>
     </div>
   );
 }
