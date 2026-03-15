@@ -44,22 +44,31 @@ function toNumber(v: unknown): number {
   return 0;
 }
 
+/** Returns current number of posts (for optimistic prepend). */
+export async function getPostsCount(): Promise<number> {
+  if (!TINO_FEED_OWNER || !TINO_MODULE_ADDRESS) {
+    return getDemoFeed().length;
+  }
+  const aptos = getAptosClient();
+  const countResult = await aptos.view({
+    payload: {
+      function: `${TINO_MODULE_ADDRESS}::feed::get_posts_count`,
+      functionArguments: [TINO_FEED_OWNER],
+    },
+  }).catch((err) => {
+    console.error("[getPostsCount] error:", err);
+    return [0];
+  });
+  return toNumber(Array.isArray(countResult) ? countResult[0] : 0);
+}
+
 export async function getPostsFromContract(): Promise<PostEntryWithIndex[]> {
   if (!TINO_FEED_OWNER || !TINO_MODULE_ADDRESS) {
     return getDemoFeed().map((p, i) => ({ ...p, index: i }));
   }
   const aptos = getAptosClient();
   const moduleAddr = TINO_MODULE_ADDRESS;
-  const countResult = await aptos.view({
-    payload: {
-      function: `${moduleAddr}::feed::get_posts_count`,
-      functionArguments: [TINO_FEED_OWNER],
-    },
-  }).catch((err) => {
-    console.error("[getPostsFromContract] get_posts_count error:", err);
-    return [0];
-  });
-  const count = toNumber(Array.isArray(countResult) ? countResult[0] : 0);
+  const count = await getPostsCount();
 
   const posts: PostEntryWithIndex[] = [];
   for (let i = 0; i < count; i++) {

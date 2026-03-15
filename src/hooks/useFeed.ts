@@ -8,7 +8,7 @@ import {
 } from "../lib/feed";
 import type { PostEntryWithIndex } from "../lib/feed";
 import { downloadBlob } from "../lib/shelby";
-import type { PostRecord } from "../types";
+import type { PostRecord, PostAttachment } from "../types";
 
 export function useFeed(currentAddress?: string | null) {
   const [posts, setPosts] = useState<PostRecord[]>([]);
@@ -21,7 +21,7 @@ export function useFeed(currentAddress?: string | null) {
       try {
         const bytes = await downloadBlob(entry.author, entry.blobName);
         const text = new TextDecoder().decode(bytes);
-        const parsed = JSON.parse(text) as { title?: string; content: string; timestamp: number };
+        const parsed = JSON.parse(text) as { title?: string; content: string; timestamp: number; attachments?: PostAttachment[] };
         let likeCount = 0;
         let hasLiked = false;
         let commentCount = 0;
@@ -40,6 +40,7 @@ export function useFeed(currentAddress?: string | null) {
           timestamp: entry.timestamp,
           title: parsed.title ?? "",
           content: parsed.content ?? "",
+          attachments: parsed.attachments as PostAttachment[] | undefined,
           likeCount,
           hasLiked,
           commentCount,
@@ -52,6 +53,7 @@ export function useFeed(currentAddress?: string | null) {
           timestamp: entry.timestamp,
           title: "",
           content: "[Content could not be loaded]",
+          attachments: undefined,
           likeCount: 0,
           hasLiked: false,
           commentCount: 0,
@@ -76,6 +78,10 @@ export function useFeed(currentAddress?: string | null) {
     }
   }, [loadPostContent]);
 
-  return { posts, loading, error, refresh, hasContract };
+  const prependPost = useCallback((post: PostRecord) => {
+    setPosts((prev) => [post, ...prev]);
+  }, []);
+
+  return { posts, loading, error, refresh, prependPost, hasContract };
 }
 

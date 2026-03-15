@@ -8,6 +8,7 @@ import { Sidebar } from "./components/Sidebar";
 import { RightPanel } from "./components/RightPanel";
 import { WalletConnect } from "./components/WalletConnect";
 import { getCommentedPostKeys, postKeyFromPost } from "./lib/commentedPosts";
+import { getPostsCount } from "./lib/feed";
 import { shelbyBlobUrl } from "./config";
 import type { PostRecord } from "./types";
 import type { SidebarTab } from "./components/Sidebar";
@@ -20,8 +21,26 @@ function postKey(post: PostRecord) {
 function App() {
   const { account, connected } = useWallet();
   const currentAddress = account?.address != null ? String(account.address) : null;
-  const { posts, loading, error, refresh, hasContract } = useFeed(currentAddress);
-  const { createPost, likePost, addComment, deletePost, submitting, error: actionError } = usePostActions(refresh);
+  const { posts, loading, error, refresh, prependPost, hasContract } = useFeed(currentAddress);
+  const { createPost, likePost, addComment, deletePost, submitting, error: actionError } = usePostActions({
+    onSuccess: refresh,
+    onPostCreated: async (data) => {
+      const count = await getPostsCount();
+      const newPost: PostRecord = {
+        index: count - 1,
+        author: data.author,
+        blobName: data.blobName,
+        timestamp: data.timestamp,
+        title: data.title,
+        content: data.content,
+        attachments: data.attachments as PostRecord["attachments"],
+        likeCount: 0,
+        commentCount: 0,
+        hasLiked: false,
+      };
+      prependPost(newPost);
+    },
+  });
   const [selectedPost, setSelectedPost] = useState<PostRecord | null>(null);
   const [feedFilter, setFeedFilter] = useState<SidebarTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -55,6 +74,10 @@ function App() {
     }
   }, [posts, selectedPost]);
 
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
   return (
     <div className="app">
       <header className="header">
@@ -66,60 +89,31 @@ function App() {
       </header>
 
       <div className="layout">
-        {connected && (
-          <Sidebar
-            activeTab={feedFilter}
-            onTabChange={setFeedFilter}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            onNewTopic={() => setSelectedPost(null)}
-            onRefresh={refresh}
-            loading={loading}
-          />
-        )}
+        <Sidebar
+          activeTab={feedFilter}
+          onTabChange={setFeedFilter}
+          onGoHome={() => setSelectedPost(null)}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onNewTopic={() => {
+            setSelectedPost(null);
+            setTimeout(() => {
+              document.getElementById("feed-compose-area")?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }, 100);
+          }}
+          onRefresh={refresh}
+          loading={loading}
+          connected={connected}
+        />
 
         <main className="main">
-          {!connected && (
-            <div className="connect-prompt">
-              <div className="connect-prompt__hero">
-                <div className="connect-prompt__hero-inner">
-                  <img
-                    src="/mascot.png"
-                    alt="Tino mascot"
-                    className="connect-prompt__mascot"
-                  />
-                  <div className="connect-prompt__hero-text">
-                    <span className="connect-prompt__badge">Forum</span>
-                    <h2 className="connect-prompt__title">Tino</h2>
-                    <p className="connect-prompt__tagline">
-                      Decentralized discussions on Aptos. Content on Shelby, interactions on-chain.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="connect-prompt__content">
-                <h3 className="connect-prompt__content-title">Get started</h3>
-                <div className="connect-prompt__features">
-                  <span className="connect-prompt__feature">Topics</span>
-                  <span className="connect-prompt__feature">Replies</span>
-                  <span className="connect-prompt__feature">Likes</span>
-                </div>
-                <div className="connect-prompt__cta-box">
-                  Use <strong>Connect wallet</strong> in the header to join.
-                </div>
-              </div>
-            </div>
+          {connected && !hasContract && (
+            <p className="demo-notice">
+              Demo mode: Deploy the feed contract (see README) so others can like and reply to topics.
+            </p>
           )}
 
-          {connected && (
-            <>
-              {!hasContract && (
-                <p className="demo-notice">
-                  Demo mode: Deploy the feed contract (see README) so others can like and reply to topics.
-                </p>
-              )}
-
-              {selectedPost ? (
+          {selectedPost ? (
                 <section className="topic-view">
                   <div className="topic-view__bar">
                     <button
@@ -198,16 +192,23 @@ function App() {
                     </aside>
                   </div>
                 </section>
-              ) : (
-                <section className="feed-flow">
-                  <div className="feed-compose">
-                    <CreatePost
-                      createPost={createPost}
-                      submitting={submitting}
-                      error={actionError}
-                    />
+          ) : (
+            <section className="feed-flow" id="feed-compose-area">
+              <div className="feed-compose">
+                {connected ? (
+                  <CreatePost
+                    createPost={createPost}
+                    submitting={submitting}
+                    error={actionError}
+                  />
+                ) : (
+                  <div className="connect-cta">
+                    <p className="connect-cta__text">Connect your wallet to start a new topic, reply, or like.</p>
+                    <p className="connect-cta__hint">Use <strong>Connect wallet</strong> in the header above.</p>
                   </div>
-                  <div className="feed-timeline">
+                )}
+              </div>
+              <div className="feed-timeline">
                     {loading && <p className="feed-loading">Loading…</p>}
                     {error && <p className="error">{error}</p>}
                     {!loading && !error && filteredPosts.length === 0 && (
@@ -239,17 +240,13 @@ function App() {
                           </li>
                         ))}
                       </ul>
-                    )}
-                  </div>
-                </section>
-              )}
-            </>
+                )}
+              </div>
+            </section>
           )}
         </main>
 
-        {connected && (
-          <RightPanel posts={posts} onSelectPost={setSelectedPost} loading={loading} />
-        )}
+        <RightPanel posts={posts} onSelectPost={setSelectedPost} loading={loading} />
       </div>
     </div>
   );

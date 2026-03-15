@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { getCommentsFromContract } from "../lib/feed";
 import { downloadBlob } from "../lib/shelby";
-import type { CommentRecord } from "../types";
+import type { CommentRecord, PostAttachment } from "../types";
 import { hasContractConfig } from "../lib/feed";
 
 export function usePostComments(postIndex: number) {
@@ -21,13 +21,14 @@ export function usePostComments(postIndex: number) {
           try {
             const bytes = await downloadBlob(r.commenter, r.blobName);
             const text = new TextDecoder().decode(bytes);
-            const parsed = JSON.parse(text) as { content: string; timestamp: number };
+            const parsed = JSON.parse(text) as { content: string; timestamp: number; attachments?: PostAttachment[] };
             return {
               postIndex,
               commenter: r.commenter,
               blobName: r.blobName,
               timestamp: r.timestamp,
               content: parsed.content,
+              attachments: parsed.attachments as PostAttachment[] | undefined,
             };
           } catch {
             return {

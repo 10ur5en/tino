@@ -1,11 +1,41 @@
-import { useState, useEffect } from "react";
-import type { PostRecord } from "../types";
+import { useState, useEffect, useRef } from "react";
+import type { PostRecord, PostAttachment } from "../types";
 import type { usePostActions } from "../hooks/usePostActions";
 import { usePostComments } from "../hooks/usePostComments";
 import { shelbyBlobUrl } from "../config";
 import { addCommentedPostKey, postKeyFromPost } from "../lib/commentedPosts";
 
 const CONTENT_PREVIEW_LENGTH = 200;
+const COMMENT_MAX = 2000;
+const ACCEPT_MEDIA = "image/*,video/*,application/pdf";
+const MAX_COMMENT_ATTACHMENTS = 2;
+const MAX_FILE_MB = 8;
+
+function fileToType(mime: string): "image" | "video" | "pdf" {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  return "pdf";
+}
+
+function AttachmentsDisplay({ attachments, compact = false }: { attachments: PostAttachment[]; compact?: boolean }) {
+  return (
+    <div className={`post-attachments ${compact ? "post-attachments--compact" : ""}`}>
+      {attachments.map((a, i) => (
+        <div key={`${a.name}-${i}`} className="post-attachment">
+          {a.type === "image" && <img src={a.data} alt="" className="post-attachment__img" />}
+          {a.type === "video" && (
+            <video src={a.data} controls className="post-attachment__video" preload="metadata" />
+          )}
+          {a.type === "pdf" && (
+            <a href={a.data} target="_blank" rel="noopener noreferrer" className="post-attachment__link">
+              📄 {a.name}
+            </a>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 type Props = {
   post: PostRecord;
@@ -62,6 +92,9 @@ export function PostCard({
 }: Props) {
   const [showComments, setShowComments] = useState(defaultExpandComments);
   const [commentText, setCommentText] = useState("");
+  const [commentAttachments, setCommentAttachments] = useState<{ type: "image" | "video" | "pdf"; data: string; mimeType: string; name: string }[]>([]);
+  const [showCommentWhy, setShowCommentWhy] = useState(false);
+  const commentFileRef = useRef<HTMLInputElement>(null);
   const { comments, loading: commentsLoading, load: loadComments } = usePostComments(post.index);
   const isAuthor = currentAddress ? String(currentAddress) === String(post.author) : false;
 
@@ -81,15 +114,41 @@ export function PostCard({
     setShowComments((v) => !v);
   };
 
+  const onCommentFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    const maxBytes = MAX_FILE_MB * 1024 * 1024;
+    for (let i = 0; i < files.length; i++) {
+      if (commentAttachments.length >= MAX_COMMENT_ATTACHMENTS) break;
+      const file = files[i];
+      if (file.size > maxBytes) continue;
+      const mime = file.type || "application/octet-stream";
+      if (!mime.startsWith("image/") && !mime.startsWith("video/") && mime !== "application/pdf") continue;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const data = reader.result as string;
+        if (!data) return;
+        setCommentAttachments((prev) => {
+          if (prev.some((a) => a.name === file.name)) return prev;
+          if (prev.length >= MAX_COMMENT_ATTACHMENTS) return prev;
+          return [...prev, { type: fileToType(mime), data, mimeType: mime, name: file.name }];
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = "";
+  };
+
   const onAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = commentText.trim();
     if (!text || submitting) return;
-    await addComment(post.index, text);
+    await addComment(post.index, text, commentAttachments.length ? commentAttachments : undefined);
     if (currentAddress) {
       addCommentedPostKey(String(currentAddress), postKeyFromPost(post.author, post.blobName));
     }
     setCommentText("");
+    setCommentAttachments([]);
     if (showComments) loadComments();
   };
 
@@ -119,14 +178,15 @@ export function PostCard({
           <h2 className="post-card__title">{post.title}</h2>
         ) : null}
         <p className="post-card__content">{contentDisplay}</p>
+        {post.attachments?.length ? <AttachmentsDisplay attachments={post.attachments} compact={compact} /> : null}
       </div>
       <div className="post-card__actions" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           className={`post-card__action ${post.hasLiked ? "is-liked" : ""}`}
-          onClick={() => hasContract && likePost(post.index)}
-          disabled={submitting || !hasContract}
-          title="Like"
+          onClick={() => hasContract && currentAddress && likePost(post.index)}
+          disabled={submitting || !hasContract || !currentAddress}
+          title={!currentAddress ? "Connect wallet to like" : "Like"}
         >
           <span className="post-card__action-icon">♥</span>
           <span>{post.likeCount ?? 0}</span>
@@ -161,19 +221,82 @@ export function PostCard({
           {hasContract ? (
             <>
               <p className="post-card__replies-title">Reply to this topic</p>
-              <p className="comment-form-hint">Your wallet will ask for 2 approvals: one to store the reply (Shelby), one to publish it (Aptos).</p>
-              <form onSubmit={onAddComment} className="comment-form">
-                <input
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  placeholder="Write your reply…"
-                  maxLength={300}
-                  disabled={submitting}
-                />
-                <button type="submit" disabled={submitting || !commentText.trim()}>
-                  Reply
-                </button>
+              {currentAddress ? (
+              <>
+                <div className="comment-form-hint-wrap">
+                  <p className="comment-form-hint">Your wallet will ask for <strong>2 approvals</strong>: 1) store reply (Shelby), 2) publish (Aptos).</p>
+                  <button
+                    type="button"
+                    className="comment-form-why-btn"
+                    onClick={() => setShowCommentWhy((v) => !v)}
+                    aria-expanded={showCommentWhy}
+                  >
+                    {showCommentWhy ? "Hide" : "Why?"}
+                  </button>
+                  {showCommentWhy && (
+                    <div className="comment-form-why-content" role="region" aria-label="Why two approvals">
+                      <p>Reply is stored on Shelby, then registered on Aptos. Two operations = two signatures.</p>
+                    </div>
+                  )}
+                </div>
+                <form onSubmit={onAddComment} className="comment-form">
+                <div className="comment-form-body-wrap">
+                  <textarea
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    placeholder="Write your reply…"
+                    rows={2}
+                    maxLength={COMMENT_MAX}
+                    disabled={submitting}
+                  />
+                  <span className={`char-counter char-counter--comment ${commentText.length >= COMMENT_MAX ? "char-counter--at-limit" : ""}`} aria-live="polite">
+                    {commentText.length}/{COMMENT_MAX}
+                  </span>
+                </div>
+                <div className="comment-form-attachments">
+                  <input
+                    ref={commentFileRef}
+                    type="file"
+                    accept={ACCEPT_MEDIA}
+                    multiple
+                    onChange={onCommentFileChange}
+                    className="create-post-file-input"
+                    aria-label="Add image, video or PDF"
+                  />
+                  <button
+                    type="button"
+                    className="comment-form-add-media"
+                    onClick={() => commentFileRef.current?.click()}
+                    disabled={submitting || commentAttachments.length >= MAX_COMMENT_ATTACHMENTS}
+                  >
+                    + Media
+                  </button>
+                  {commentAttachments.length > 0 && (
+                    <ul className="create-post-attachment-list create-post-attachment-list--small">
+                      {commentAttachments.map((a) => (
+                        <li key={a.name} className="create-post-attachment-item">
+                          {a.type === "image" ? (
+                            <img src={a.data} alt="" className="create-post-attachment-preview" />
+                          ) : (
+                            <span className="create-post-attachment-icon">{a.type === "video" ? "🎬" : "📄"}</span>
+                          )}
+                          <span className="create-post-attachment-name" title={a.name}>{a.name}</span>
+                          <button type="button" className="create-post-attachment-remove" onClick={() => setCommentAttachments((p) => p.filter((x) => x.name !== a.name))} aria-label={`Remove ${a.name}`}>×</button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="comment-form-actions">
+                  <button type="submit" disabled={submitting || !commentText.trim()}>
+                    Reply
+                  </button>
+                </div>
               </form>
+              </>
+              ) : (
+                <p className="post-card__connect-to-reply">Connect your wallet to reply to this topic.</p>
+              )}
             </>
           ) : (
             <div className="post-card__replies-cta">
@@ -204,6 +327,7 @@ export function PostCard({
                       </a>
                     </div>
                     <span className="comment-content">{c.content}</span>
+                    {c.attachments?.length ? <AttachmentsDisplay attachments={c.attachments} compact /> : null}
                   </li>
                 ))}
               </ul>

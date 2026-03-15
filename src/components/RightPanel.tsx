@@ -1,8 +1,9 @@
 import type { PostRecord } from "../types";
+import { SHELBY_EXPLORER_BASE } from "../config";
 
 const CONTENT_FAILED = "[Content could not be loaded]";
 const MAX_ITEMS = 5;
-const MAX_TITLE_LEN = 38;
+const MAX_TITLE_LEN = 36;
 
 function getLabel(post: PostRecord): string {
   const title = (post.title ?? "").trim();
@@ -42,13 +43,30 @@ export function RightPanel({ posts, onSelectPost, loading }: Props) {
     .slice(0, MAX_ITEMS);
 
   return (
-    <aside className="right-panel" aria-label="Trending and latest">
+    <aside className="right-panel" aria-label="Discover and shortcuts">
+      <div className="right-panel__about">
+        <p className="right-panel__about-text">
+          Content on Shelby, interactions on Aptos. Decentralized discussions.
+        </p>
+        <a
+          href={SHELBY_EXPLORER_BASE}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="right-panel__about-link"
+        >
+          Shelby Explorer →
+        </a>
+      </div>
+
       <div className="right-panel__section">
-        <h2 className="right-panel__title">Most liked · Top 5</h2>
+        <h2 className="right-panel__title">
+          <span className="right-panel__title-dot" aria-hidden />
+          Trending
+        </h2>
         {loading ? (
           <p className="right-panel__loading">Loading…</p>
         ) : mostLiked.length === 0 ? (
-          <p className="right-panel__empty">No likes yet. Like topics to see them here.</p>
+          <p className="right-panel__empty">Like topics to see them here.</p>
         ) : (
           <ol className="right-panel__list" start={1}>
             {mostLiked.map((post, i) => (
@@ -62,7 +80,7 @@ export function RightPanel({ posts, onSelectPost, loading }: Props) {
                   <span className="right-panel__rank" aria-hidden>{i + 1}</span>
                   <span className="right-panel__item-content">
                     <span className="right-panel__item-label">{getLabel(post)}</span>
-                    <span className="right-panel__item-meta">♥ {post.likeCount ?? 0} likes</span>
+                    <span className="right-panel__item-meta">♥ {post.likeCount ?? 0}</span>
                   </span>
                 </button>
               </li>
@@ -70,12 +88,16 @@ export function RightPanel({ posts, onSelectPost, loading }: Props) {
           </ol>
         )}
       </div>
+
       <div className="right-panel__section">
-        <h2 className="right-panel__title">Newest · Last 5</h2>
+        <h2 className="right-panel__title">
+          <span className="right-panel__title-dot" aria-hidden />
+          Latest
+        </h2>
         {loading ? (
           <p className="right-panel__loading">Loading…</p>
         ) : newest.length === 0 ? (
-          <p className="right-panel__empty">No topics yet. Start the first one.</p>
+          <p className="right-panel__empty">No topics yet.</p>
         ) : (
           <ol className="right-panel__list" start={1}>
             {newest.map((post, i) => (

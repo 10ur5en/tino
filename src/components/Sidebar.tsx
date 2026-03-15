@@ -3,21 +3,25 @@ export type SidebarTab = "all" | "liked" | "commented";
 type Props = {
   activeTab: SidebarTab;
   onTabChange: (tab: SidebarTab) => void;
+  onGoHome?: () => void;
   searchQuery: string;
   onSearchChange: (value: string) => void;
   onNewTopic: () => void;
   onRefresh: () => void;
   loading: boolean;
+  connected?: boolean;
 };
 
 export function Sidebar({
   activeTab,
   onTabChange,
+  onGoHome,
   searchQuery,
   onSearchChange,
   onNewTopic,
   onRefresh,
   loading,
+  connected = true,
 }: Props) {
   return (
     <aside className="sidebar sidebar--nav" aria-label="Navigation">
@@ -44,7 +48,10 @@ export function Sidebar({
           <button
             type="button"
             className={`sidebar-nav__item ${activeTab === "all" ? "active" : ""}`}
-            onClick={() => onTabChange("all")}
+            onClick={() => {
+              onTabChange("all");
+              onGoHome?.();
+            }}
             aria-current={activeTab === "all" ? "page" : undefined}
           >
             <span className="sidebar-nav__icon" aria-hidden>🏠</span>
@@ -72,7 +79,13 @@ export function Sidebar({
       </div>
       <div className="sidebar__actions-block">
         <span className="sidebar__label">Actions</span>
-        <button type="button" className="sidebar-nav__cta" onClick={onNewTopic}>
+        <button
+          type="button"
+          className="sidebar-nav__cta"
+          onClick={onNewTopic}
+          disabled={!connected}
+          title={!connected ? "Connect wallet to create a topic" : undefined}
+        >
           + New topic
         </button>
         <button
@@ -80,13 +93,13 @@ export function Sidebar({
           className="sidebar-refresh-btn"
           onClick={onRefresh}
           disabled={loading}
-          aria-label="Refresh feed"
-          title="Refresh feed"
+          aria-label="Get new topics"
+          title="Get new topics"
         >
           <span className="sidebar-refresh-icon" aria-hidden>
             {loading ? "⋯" : "↻"}
           </span>
-          <span className="sidebar-refresh-label">Refresh</span>
+          <span className="sidebar-refresh-label">Get new topics</span>
         </button>
       </div>
     </aside>
